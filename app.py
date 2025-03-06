@@ -4,24 +4,51 @@ from sentence_transformers import SentenceTransformer
 import os
 
 # 🔹 Initialize Pinecone
-# Retrieve Pinecone API Key from Streamlit secrets
+# # Retrieve Pinecone API Key from Streamlit secrets
+# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+# PINECONE_ENV = st.secrets["PINECONE_ENV"]
+# INDEX_NAME = "legaldata-index"
+
+# # Validate API Key
+# if not PINECONE_API_KEY:
+#     raise Exception("Pinecone API key not found. Set it in your Streamlit secrets.")
+
+# # Initialize Pinecone Client
+# pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+
+# # Check if index exists before using it
+# if INDEX_NAME not in pc.list_indexes():
+#     raise Exception(f"Index '{INDEX_NAME}' not found. Create it in Pinecone first.")
+
+# # Connect to Pinecone Index
+# index = pc.Index(INDEX_NAME)
+
+import streamlit as st
+import pinecone
+
+# Retrieve Pinecone API Key and Environment
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 INDEX_NAME = "legaldata-index"
 
-# Validate API Key
 if not PINECONE_API_KEY:
-    raise Exception("Pinecone API key not found. Set it in your Streamlit secrets.")
+    raise Exception("Pinecone API key is missing. Check Streamlit secrets.")
 
-# Initialize Pinecone Client
-pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+# Initialize Pinecone
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 
-# Check if index exists before using it
-if INDEX_NAME not in pc.list_indexes():
-    raise Exception(f"Index '{INDEX_NAME}' not found. Create it in Pinecone first.")
+# List available indexes
+existing_indexes = pinecone.list_indexes()
+st.write("Available Indexes:", existing_indexes)  # Debugging step
 
-# Connect to Pinecone Index
-index = pc.Index(INDEX_NAME)
+# Check if the index exists
+if INDEX_NAME not in existing_indexes:
+    raise Exception(f"Index '{INDEX_NAME}' not found. Check Pinecone dashboard.")
+
+# Connect to the index
+index = pinecone.Index(INDEX_NAME)
+st.write(f"Successfully connected to '{INDEX_NAME}'")
+
 
 
 # 🔹 Load Sentence Transformer model
