@@ -4,7 +4,7 @@ from sentence_transformers import SentenceTransformer
 import os
 
 # 🔹 Initialize Pinecone
-PINECONE_API_KEY = st.secrets("PINECONE_API_KEY")
+PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 if not PINECONE_API_KEY:
     raise Exception("Pinecone API key not found. Set it in your environment variables.")
 
