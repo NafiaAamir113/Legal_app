@@ -1,13 +1,20 @@
 import streamlit as st
 import pinecone
 from sentence_transformers import SentenceTransformer
+import os
 
 # 🔹 Initialize Pinecone
-PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-PINECONE_ENV = st.secrets["PINECONE_ENV"]
+PINECONE_API_KEY = st.secrets("PINECONE_API_KEY")
+if not PINECONE_API_KEY:
+    raise Exception("Pinecone API key not found. Set it in your environment variables.")
+
+pinecone.init(api_key=PINECONE_API_KEY, environment="us-east-1")
+
+# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+# PINECONE_ENV = st.secrets["PINECONE_ENV"]
 INDEX_NAME = "legaldata-index"
 
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+# pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 index = pinecone.Index(INDEX_NAME)
 
 # 🔹 Load Sentence Transformer model
