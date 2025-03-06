@@ -1,5 +1,5 @@
 import streamlit as st
-from pinecone import pinecone
+import pinecone
 from sentence_transformers import SentenceTransformer
 import os
 
@@ -24,20 +24,19 @@ import os
 # index = pc.Index(INDEX_NAME)
 
 
+import streamlit as st
+import pinecone  # Correct import for Pinecone
 
-
-
-
-# Load Pinecone credentials from Streamlit secrets
+# Load API key from Streamlit secrets
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 INDEX_NAME = "legaldata-index"
 
-# Initialize Pinecone Client
-pc = Pinecone(api_key=PINECONE_API_KEY)
+# Initialize Pinecone
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 
-# List available indexes (for debugging)
-existing_indexes = pc.list_indexes()
+# Check available indexes
+existing_indexes = pinecone.list_indexes()
 st.write("Available Indexes:", existing_indexes)
 
 # Ensure the index exists
@@ -45,8 +44,12 @@ if INDEX_NAME not in existing_indexes:
     raise Exception(f"Index '{INDEX_NAME}' not found. Check Pinecone dashboard.")
 
 # Connect to the index
-index = pc.Index(INDEX_NAME)
+index = pinecone.Index(INDEX_NAME)
 st.write(f"Successfully connected to '{INDEX_NAME}'")
+
+
+
+
 
 
 
