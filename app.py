@@ -131,7 +131,7 @@ if st.button("Search") and query:
 
         # 🔹 Generate Answer
         if legal_cases:
-            combined_text = "\n\n".join(legal_cases[:2])  # Use top 2 cases
+            combined_text = "\n\n".join(legal_cases[:10])  # Use top 2 cases
             legal_answer = generate_legal_answer(query, combined_text)
             st.subheader("📌 Legal Answer:")
             st.write(legal_answer)
