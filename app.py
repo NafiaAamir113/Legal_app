@@ -38,102 +38,85 @@
 #         st.warning("⚠️ No relevant documents found.")
 
 
+
+
+
+
 import streamlit as st
+import requests
 import pinecone
 from sentence_transformers import SentenceTransformer
-import requests  
 
-# 🔹 Load API Keys from Streamlit Secrets
-PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-PINECONE_ENV = st.secrets["PINECONE_ENV"]
-TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")  
+# API Keys (Replace with your Together AI and Pinecone keys)
+TOGETHER_AI_API_KEY = "your-together-ai-api-key"
+PINECONE_API_KEY = "your-pinecone-api-key"
+PINECONE_INDEX_NAME = "legaldata"
 
-INDEX_NAME = "legaldata-index"
+# Initialize Pinecone
+pinecone.init(api_key=PINECONE_API_KEY, environment="us-west1-gcp")
+index = pinecone.Index(PINECONE_INDEX_NAME)
 
-# 🔹 Initialize Pinecone Client
-pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+# Load Embedding Model
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
-# 🔹 Check if Index Exists
-if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
-    st.error(f"❌ Index '{INDEX_NAME}' not found. Check your Pinecone dashboard.")
-    st.stop()
+# Streamlit UI
+st.set_page_config(page_title="Legal RAG System", layout="wide")
+st.title("📜 Legal Retrieval-Augmented Generation (RAG) System")
 
-index = pc.Index(INDEX_NAME)
-st.success(f"✅ Connected to '{INDEX_NAME}'")
+# User input
+query = st.text_input("🔍 Enter your legal question:")
 
-# 🔹 Load Sentence Transformer Model
-model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+if query:
+    with st.spinner("Processing your query..."):
+        # Generate query embedding
+        query_embedding = embedding_model.encode(query).tolist()
 
-# 🔹 Expand Legal Keywords
-def expand_legal_terms(query):
-    synonyms = {
-        "contract": ["agreement", "deal", "obligation"],
-        "fraud": ["misrepresentation", "deception"],
-        "plaintiff": ["claimant", "complainant"],
-        "defendant": ["accused", "respondent"]
-    }
-    words = query.split()
-    expanded_query = [word for word in words]  
-    for word in words:
-        if word.lower() in synonyms:
-            expanded_query.extend(synonyms[word.lower()])
-    return " ".join(expanded_query)
+        # Retrieve top 5 relevant documents
+        search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
 
-# 🔹 AI Model to Generate a Direct Legal Answer
-def generate_legal_answer(query, case_text):
-    url = "https://api.together.xyz/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_AI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-    data = {
-        "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "messages": [
-            {"role": "system", "content": "You are an expert legal assistant. Provide a clear and concise legal answer."},
-            {"role": "user", "content": f"Question: {query}\n\nRelevant Legal Case:\n{case_text}"}
-        ],
-        "temperature": 0.5
-    }
+        if "matches" in search_results and search_results["matches"]:
+            # Extract relevant text
+            context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+            context_text = "\n\n".join(context_chunks)
 
-    response = requests.post(url, json=data, headers=headers)
-    if response.status_code == 200:
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        return "⚠️ Unable to generate a response. Try again."
+            # Display retrieved chunks
+            with st.expander("📄 Retrieved Documents (Top 5 Chunks)"):
+                for i, chunk in enumerate(context_chunks):
+                    st.write(f"**Chunk {i+1}:**")
+                    st.info(chunk)
 
-# 🔹 Streamlit UI
-st.title("🔎 Legal Assistant")
+            # Prepare prompt for Llama-3.3-70B
+            prompt = f"""You are a legal assistant. Answer the question based on the retrieved legal documents.
 
-# 🔹 User Input
-query = st.text_input("Enter your legal question:")
+            Context:
+            {context_text}
 
-if st.button("Search") and query:
-    with st.spinner("🔍 Searching legal cases..."):
-        
-        query = query.lower().strip()
-        expanded_query = expand_legal_terms(query)
-        query_vector = model.encode(expanded_query).tolist()
+            Question: {query}
 
-        # 🔹 Retrieve from Pinecone
-        try:
-            results = index.query(vector=query_vector, top_k=3, include_metadata=True)
-        except Exception as e:
-            st.error(f"⚠️ Pinecone Query Error: {str(e)}")
-            st.stop()
+            Answer:"""
 
-        # 🔹 Extract Relevant Cases
-        legal_cases = []
-        for match in results.get("matches", []):
-            metadata = match.get("metadata", {})
-            case_text = metadata.get("full_text", "")
-            if case_text:
-                legal_cases.append(case_text)
+            # Call Together AI API (Meta-Llama-3.3-70B)
+            api_url = "https://api.together.xyz/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"}
+            payload = {
+                "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                "messages": [{"role": "system", "content": "You are an expert in legal matters."},
+                             {"role": "user", "content": prompt}],
+                "temperature": 0.2
+            }
 
-        # 🔹 Generate Answer
-        if legal_cases:
-            combined_text = "\n\n".join(legal_cases[:10])  # Use top 2 cases
-            legal_answer = generate_legal_answer(query, combined_text)
-            st.subheader("📌 Legal Answer:")
-            st.write(legal_answer)
+            response = requests.post(api_url, headers=headers, json=payload)
+
+            if response.status_code == 200:
+                answer = response.json()["choices"][0]["message"]["content"]
+                st.success("💡 AI Response:")
+                st.write(answer)
+            else:
+                st.error(f"Error: {response.text}")
+
         else:
-            st.warning("⚠️ No relevant cases found. Try modifying your question.")
+            st.warning("⚠️ No relevant legal documents found. Try rephrasing your query.")
+
+# Footer
+st.markdown("---")
+st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
