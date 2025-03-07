@@ -44,6 +44,9 @@ import requests
 import pinecone
 from sentence_transformers import SentenceTransformer
 
+
+st.set_page_config(page_title="Legal RAG System", layout="wide")
+
 # 🔹 Load API Keys from Streamlit Secrets
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
@@ -67,7 +70,7 @@ st.success(f"✅ Successfully connected to '{INDEX_NAME}'")
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Streamlit UI
-st.set_page_config(page_title="Legal RAG System", layout="wide")
+# st.set_page_config(page_title="Legal RAG System", layout="wide")
 st.title("\ud83d\udcda Legal Retrieval-Augmented Generation (RAG) System")
 
 # User input
