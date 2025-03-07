@@ -2,4 +2,5 @@ streamlit
 pinecone
 sentence-transformers
 together
+requests
 
