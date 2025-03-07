@@ -44,17 +44,24 @@ import requests
 import pinecone
 from sentence_transformers import SentenceTransformer
 
-# Load API keys and environment variables from Streamlit secrets
-TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+# 🔹 Load API Keys from Streamlit Secrets
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-PINECONE_ENV = st.secrets["PINECONE_ENV"]  # Pinecone environment
+PINECONE_ENV = st.secrets["PINECONE_ENV"]
+TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")  # For AI summaries
 
-# Define Pinecone index name directly
-PINECONE_INDEX_NAME = "legaldata-index"
+INDEX_NAME = "legaldata-index"
 
-# Initialize Pinecone
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
-index = pinecone.Index(PINECONE_INDEX_NAME)
+# 🔹 Initialize Pinecone Client
+pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+
+# 🔹 Check if Index Exists
+if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
+    st.error(f"❌ Index '{INDEX_NAME}' not found. Check your Pinecone dashboard.")
+    st.stop()
+
+index = pc.Index(INDEX_NAME)
+st.success(f"✅ Successfully connected to '{INDEX_NAME}'")
+
 
 # Load Embedding Model
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
