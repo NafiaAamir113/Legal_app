@@ -41,12 +41,12 @@
 import streamlit as st
 import pinecone
 from sentence_transformers import SentenceTransformer
-import requests  # For AI-generated summaries (Together AI)
+import requests  
 
 # 🔹 Load API Keys from Streamlit Secrets
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
-TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")  # For AI summaries
+TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")  
 
 INDEX_NAME = "legaldata-index"
 
@@ -59,12 +59,12 @@ if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
     st.stop()
 
 index = pc.Index(INDEX_NAME)
-st.success(f"✅ Successfully connected to '{INDEX_NAME}'")
+st.success(f"✅ Connected to '{INDEX_NAME}'")
 
 # 🔹 Load Sentence Transformer Model
 model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-# 🔹 Function to Expand Legal Keywords (Optional)
+# 🔹 Expand Legal Keywords
 def expand_legal_terms(query):
     synonyms = {
         "contract": ["agreement", "deal", "obligation"],
@@ -73,15 +73,14 @@ def expand_legal_terms(query):
         "defendant": ["accused", "respondent"]
     }
     words = query.split()
-    expanded_query = []
+    expanded_query = [word for word in words]  
     for word in words:
-        expanded_query.append(word)
         if word.lower() in synonyms:
             expanded_query.extend(synonyms[word.lower()])
     return " ".join(expanded_query)
 
-# 🔹 Function to Get AI Summary Using Llama-3.3-70B
-def generate_llama_summary(summary_prompt):
+# 🔹 AI Model to Generate a Direct Legal Answer
+def generate_legal_answer(query, case_text):
     url = "https://api.together.xyz/v1/chat/completions"
     headers = {
         "Authorization": f"Bearer {TOGETHER_AI_API_KEY}",
@@ -90,76 +89,51 @@ def generate_llama_summary(summary_prompt):
     data = {
         "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
         "messages": [
-            {"role": "system", "content": "You are a legal assistant."},
-            {"role": "user", "content": summary_prompt}
+            {"role": "system", "content": "You are an expert legal assistant. Provide a clear and concise legal answer."},
+            {"role": "user", "content": f"Question: {query}\n\nRelevant Legal Case:\n{case_text}"}
         ],
-        "temperature": 0.7
+        "temperature": 0.5
     }
 
     response = requests.post(url, json=data, headers=headers)
     if response.status_code == 200:
         return response.json()["choices"][0]["message"]["content"]
     else:
-        return f"Error: {response.json()}"
+        return "⚠️ Unable to generate a response. Try again."
 
 # 🔹 Streamlit UI
-st.title("🔎 Legal Case Retrieval System")
+st.title("🔎 Legal Assistant")
 
 # 🔹 User Input
-query = st.text_input("Enter your legal query:")
+query = st.text_input("Enter your legal question:")
 
 if st.button("Search") and query:
     with st.spinner("🔍 Searching legal cases..."):
         
-        # 🔹 Query Processing
-        query = query.lower().strip()  # Normalize query
-        expanded_query = expand_legal_terms(query)  # Expand keywords
+        query = query.lower().strip()
+        expanded_query = expand_legal_terms(query)
         query_vector = model.encode(expanded_query).tolist()
 
         # 🔹 Retrieve from Pinecone
         try:
-            results = index.query(vector=query_vector, top_k=5, include_metadata=True)
+            results = index.query(vector=query_vector, top_k=3, include_metadata=True)
         except Exception as e:
             st.error(f"⚠️ Pinecone Query Error: {str(e)}")
             st.stop()
 
-        # 🔹 Filter & Rank Results
-        relevant_cases = []
+        # 🔹 Extract Relevant Cases
+        legal_cases = []
         for match in results.get("matches", []):
-            score = match.get("score", 0)
             metadata = match.get("metadata", {})
-            case_name = metadata.get("case_name", "Unknown Case")
-            citation = metadata.get("citation", "No citation available")
-            summary = metadata.get("summary", "No summary provided")
-            case_type = metadata.get("case_type", "Unknown")
+            case_text = metadata.get("full_text", "")
+            if case_text:
+                legal_cases.append(case_text)
 
-            # Filter by Relevance
-            if score > 0.60:  # Set similarity threshold
-                relevant_cases.append((score, case_name, citation, summary, case_type))
-
-        # 🔹 Display Results
-        if relevant_cases:
-            st.success("✅ Here are the most relevant legal cases:")
-
-            for i, (score, case_name, citation, summary, case_type) in enumerate(relevant_cases, 1):
-                st.write(f"**{i}. {case_name}**")
-                st.write(f"🔹 **Score:** {round(score, 2)}")
-                st.write(f"🔹 **Citation:** {citation}")
-                st.write(f"🔹 **Case Type:** {case_type}")
-                st.write(f"📄 **Summary:** {summary}")
-                st.write("---")
-        
-            # 🔹 AI Summary of Retrieved Cases (Using Llama-3.3-70B)
-            if TOGETHER_AI_API_KEY:
-                if st.button("Generate AI Summary"):
-                    st.subheader("📌 AI-Generated Case Summary:")
-                    summary_prompt = "Summarize these legal cases in simple terms:\n\n"
-                    for _, case_name, _, summary, _ in relevant_cases:
-                        summary_prompt += f"- {case_name}: {summary}\n"
-                    
-                    llama_summary = generate_llama_summary(summary_prompt)
-                    st.write(llama_summary)
-        
+        # 🔹 Generate Answer
+        if legal_cases:
+            combined_text = "\n\n".join(legal_cases[:2])  # Use top 2 cases
+            legal_answer = generate_legal_answer(query, combined_text)
+            st.subheader("📌 Legal Answer:")
+            st.write(legal_answer)
         else:
-            st.warning("⚠️ No relevant cases found. Try modifying your query.")
-
+            st.warning("⚠️ No relevant cases found. Try modifying your question.")
