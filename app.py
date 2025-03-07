@@ -39,21 +39,21 @@
 
 
 
-
-
-
 import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer
 
-# API Keys (Replace with your Together AI and Pinecone keys)
-TOGETHER_AI_API_KEY = "your-together-ai-api-key"
-PINECONE_API_KEY = "your-pinecone-api-key"
+# Load API keys and environment variables from Streamlit secrets
+TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+PINECONE_ENV = st.secrets["PINECONE_ENV"]  # Pinecone environment
+
+# Define Pinecone index name directly
 PINECONE_INDEX_NAME = "legaldata-index"
 
 # Initialize Pinecone
-pinecone.init(api_key=PINECONE_API_KEY, environment="us-east-1")
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 index = pinecone.Index(PINECONE_INDEX_NAME)
 
 # Load Embedding Model
@@ -61,62 +61,67 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 # Streamlit UI
 st.set_page_config(page_title="Legal RAG System", layout="wide")
-st.title("📜 Legal Retrieval-Augmented Generation (RAG) System")
+st.title("\ud83d\udcda Legal Retrieval-Augmented Generation (RAG) System")
 
 # User input
-query = st.text_input("🔍 Enter your legal question:")
+query = st.text_input("\ud83d\udd0d Enter your legal question:")
 
 if query:
-    with st.spinner("Processing your query..."):
-        # Generate query embedding
-        query_embedding = embedding_model.encode(query).tolist()
+    with st.spinner("\ud83d\udd0e Searching for relevant legal documents..."):
+        try:
+            # Generate query embedding
+            query_embedding = embedding_model.encode(query).tolist()
 
-        # Retrieve top 5 relevant documents
-        search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
+            # Retrieve top 5 relevant documents
+            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
 
-        if "matches" in search_results and search_results["matches"]:
-            # Extract relevant text
-            context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
-            context_text = "\n\n".join(context_chunks)
+            if search_results.get("matches"):
+                # Extract relevant text
+                context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+                context_text = "\n\n".join(context_chunks)
 
-            # Display retrieved chunks
-            with st.expander("📄 Retrieved Documents (Top 5 Chunks)"):
-                for i, chunk in enumerate(context_chunks):
-                    st.write(f"**Chunk {i+1}:**")
-                    st.info(chunk)
+                # Display retrieved documents
+                with st.expander("\ud83d\udcdd Retrieved Documents (Top 5 Chunks)"):
+                    for i, chunk in enumerate(context_chunks):
+                        st.write(f"**Chunk {i+1}:**")
+                        st.info(chunk)
 
-            # Prepare prompt for Llama-3.3-70B
-            prompt = f"""You are a legal assistant. Answer the question based on the retrieved legal documents.
+                # Prepare prompt for Llama-3.3-70B
+                prompt = f"""You are a legal assistant. Answer the question based on the retrieved legal documents.
 
-            Context:
-            {context_text}
+                Context:
+                {context_text}
 
-            Question: {query}
+                Question: {query}
 
-            Answer:"""
+                Answer:"""
 
-            # Call Together AI API (Meta-Llama-3.3-70B)
-            api_url = "https://api.together.xyz/v1/chat/completions"
-            headers = {"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"}
-            payload = {
-                "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-                "messages": [{"role": "system", "content": "You are an expert in legal matters."},
-                             {"role": "user", "content": prompt}],
-                "temperature": 0.2
-            }
+                # Call Together AI API
+                api_url = "https://api.together.xyz/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"}
+                payload = {
+                    "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                    "messages": [{"role": "system", "content": "You are an expert in legal matters."},
+                                 {"role": "user", "content": prompt}],
+                    "temperature": 0.2
+                }
 
-            response = requests.post(api_url, headers=headers, json=payload)
+                response = requests.post(api_url, headers=headers, json=payload)
 
-            if response.status_code == 200:
-                answer = response.json()["choices"][0]["message"]["content"]
-                st.success("💡 AI Response:")
-                st.write(answer)
+                if response.status_code == 200:
+                    answer = response.json()["choices"][0]["message"]["content"]
+                    st.success("\ud83d\udca1 AI Response:")
+                    st.write(answer)
+                else:
+                    st.error(f"\u26a0\ufe0f API Error: {response.text}")
+
             else:
-                st.error(f"Error: {response.text}")
+                st.warning("\u26a0\ufe0f No relevant legal documents found. Try rephrasing your query.")
 
-        else:
-            st.warning("⚠️ No relevant legal documents found. Try rephrasing your query.")
+        except Exception as e:
+            st.error(f"\u26a0\ufe0f Error: {str(e)}")
 
 # Footer
 st.markdown("---")
-st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+st.markdown("\ud83d\ude80 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+
