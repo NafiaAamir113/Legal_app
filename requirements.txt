@@ -3,22 +3,3 @@ pinecone
 sentence-transformers
 together
 requests
-os
-time
-re
-fitz  # PyMuPDF
-nltk
-opencv-python
-numpy
-pytesseract
-requests
-streamlit
-tqdm
-Pillow
-pdf2image
-sentence-transformers
-langdetect
-deep-translator
-pinecone-client
-langchain
-openai
