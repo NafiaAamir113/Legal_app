@@ -52,7 +52,7 @@ PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")  # Optional API Key
 
-INDEX_NAME = "legaldata-index"
+INDEX_NAME = "lawdata-index"
 
 # 🔹 Initialize Pinecone Client
 pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
