@@ -40,7 +40,7 @@ if query:
             query_embedding = embedding_model.encode(query).tolist()
 
             # Retrieve top 5 relevant documents
-            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
 
             if search_results.get("matches"):
                 # Extract relevant text
@@ -48,7 +48,7 @@ if query:
                 context_text = "\n\n".join(context_chunks)
 
                 # Display retrieved documents
-                with st.expander("📄 Retrieved Documents (Top 5 Chunks)"):
+                with st.expander("📄 Retrieved Documents (Top 10 Chunks)"):
                     for i, chunk in enumerate(context_chunks):
                         st.write(f"**Chunk {i+1}:**")
                         st.info(chunk)
