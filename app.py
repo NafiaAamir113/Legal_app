@@ -81,7 +81,7 @@ if query:
             query_embedding = embedding_model.encode(query).tolist()
 
             # Retrieve top 5 relevant documents
-            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
 
             if search_results.get("matches"):
                 # Extract relevant text
