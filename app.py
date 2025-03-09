@@ -94,9 +94,6 @@
 # st.markdown("---")
 # st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
 
-
-
-
 import os
 import time
 import re
@@ -200,4 +197,5 @@ if query:
 
 st.markdown("---")
 st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+
 
