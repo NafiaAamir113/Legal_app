@@ -3,7 +3,6 @@ pinecone
 sentence-transformers
 together
 requests
-
 os
 time
 re
