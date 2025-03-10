@@ -263,14 +263,13 @@
 # # st.markdown("---")
 # # st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
 
-
 import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 # Streamlit page setup
-st.set_page_config(page_title="Legal RAG System", layout="wide")
+st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
 
 # Load secrets
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
@@ -283,7 +282,7 @@ pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
 # Check if index exists
 existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
 if INDEX_NAME not in existing_indexes:
-    st.error(f"❌ Index '{INDEX_NAME}' not found.")
+    st.error(f"Index '{INDEX_NAME}' not found.")
     st.stop()
 
 # Initialize Pinecone index
@@ -293,23 +292,31 @@ index = pc.Index(INDEX_NAME)
 embedding_model = SentenceTransformer("BAAI/bge-large-en")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-st.title("📚 Legal Retrieval-Augmented Generation (RAG) System")
-query = st.text_input("🔍 Enter your legal question:")
+# Page Title
+st.title("LEGAL ASSISTANT")
 
-if query:
-    # Check for incomplete query
-    if len(query.split()) < 4:  # Simple heuristic for incomplete queries
-        st.warning("⚠️ Your query seems incomplete. Please provide more details.")
+# Input field
+query = st.text_input("Enter your legal question:")
+
+# Generate Answer Button
+if st.button("Generate Answer"):
+    if not query:
+        st.warning("Please enter a legal question before generating an answer.")
         st.stop()
 
-    with st.spinner("🔎 Searching..."):
+    # Check for incomplete query
+    if len(query.split()) < 4:  # Simple heuristic for incomplete queries
+        st.warning("Your query seems incomplete. Please provide more details.")
+        st.stop()
+
+    with st.spinner("Searching..."):
         query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
 
-        # ✅ Query Pinecone with error handling
+        # Query Pinecone with error handling
         try:
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
-            st.error(f"❌ Pinecone query failed: {e}")
+            st.error(f"Pinecone query failed: {e}")
             st.stop()
 
         if not search_results or "matches" not in search_results or not search_results["matches"]:
@@ -346,11 +353,13 @@ if query:
                                {"role": "user", "content": prompt}], "temperature": 0.2}
         )
 
-        answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "❌ No valid response from AI.")
-        st.success("💡 AI Response:")
+        answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
+        st.success("AI Response:")
         st.write(answer)
 
-st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+# Footer
+st.markdown("<p style='text-align: center;'>Built with Streamlit</p>", unsafe_allow_html=True)
+
 
 
 
