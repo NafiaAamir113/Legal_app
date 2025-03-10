@@ -208,7 +208,7 @@ PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
 
-INDEX_NAME = "lawdata-index"
+INDEX_NAME = "lawdata-2-index"
 pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
 
 if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
