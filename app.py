@@ -197,17 +197,92 @@
 
 
 
+# import streamlit as st
+# import requests
+# import pinecone
+# from sentence_transformers import SentenceTransformer, CrossEncoder
+
+# st.set_page_config(page_title="Legal RAG System", layout="wide")
+
+# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+# PINECONE_ENV = st.secrets["PINECONE_ENV"]
+# TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+
+# INDEX_NAME = "lawdata-2-index"
+# pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+
+# if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
+#     st.error(f"❌ Index '{INDEX_NAME}' not found.")
+#     st.stop()
+
+# index = pc.Index(INDEX_NAME)
+# embedding_model = SentenceTransformer("BAAI/bge-large-en")
+# reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+# st.title("📚 Legal Retrieval-Augmented Generation (RAG) System")
+
+# query = st.text_input("🔍 Enter your legal question:")
+
+# if query:
+#     with st.spinner("🔎 Searching..."):
+#         query_embedding = embedding_model.encode(query).tolist()
+#         search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
+
+#         if search_results.get("matches"):
+#             context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+#             rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
+#             ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
+
+#             context_text = "\n\n".join([r[0] for r in ranked_results[:5]])
+
+#             prompt = f"""You are a legal assistant. Answer the question based on the retrieved legal documents.
+
+#             Context:
+#             {context_text}
+
+#             Question: {query}
+
+#             Answer:"""
+
+#             response = requests.post(
+#                 "https://api.together.xyz/v1/chat/completions",
+#                 headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
+#                 json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+#                       "messages": [{"role": "system", "content": "You are an expert in legal matters."},
+#                                    {"role": "user", "content": prompt}], "temperature": 0.2}
+#             )
+
+#             answer = response.json()["choices"][0]["message"]["content"]
+#             st.success("💡 AI Response:")
+#             st.write(answer)
+
+# st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+
+
+# # # 🔹 Footer
+# # st.markdown("---")
+# # st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+
+
+
+
+
+
+
 import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
+# Streamlit Config
 st.set_page_config(page_title="Legal RAG System", layout="wide")
 
+# API Keys
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
 
+# Initialize Pinecone
 INDEX_NAME = "lawdata-2-index"
 pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
 
@@ -216,58 +291,70 @@ if INDEX_NAME not in [index_info["name"] for index_info in pc.list_indexes()]:
     st.stop()
 
 index = pc.Index(INDEX_NAME)
+
+# Load Models
 embedding_model = SentenceTransformer("BAAI/bge-large-en")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
+# UI Title
 st.title("📚 Legal Retrieval-Augmented Generation (RAG) System")
 
+# User Query Input
 query = st.text_input("🔍 Enter your legal question:")
 
-if query:
+# Generate Answer Button
+if st.button("🚀 Generate Answer") and query:
     with st.spinner("🔎 Searching..."):
-        query_embedding = embedding_model.encode(query).tolist()
-        search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
+        try:
+            # Embedding Search
+            query_embedding = embedding_model.encode(query).tolist()
+            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
 
-        if search_results.get("matches"):
-            context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
-            rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
-            ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
+            if search_results.get("matches"):
+                # Extract and Rerank Results
+                context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+                rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
+                ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
 
-            context_text = "\n\n".join([r[0] for r in ranked_results[:5]])
+                # Select dynamic number of chunks (min available or 5)
+                num_chunks = min(len(ranked_results), 5)
+                context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-            prompt = f"""You are a legal assistant. Answer the question based on the retrieved legal documents.
+                # Construct LLM prompt
+                prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
 
-            Context:
-            {context_text}
+                Context:
+                {context_text}
 
-            Question: {query}
+                Question: {query}
 
-            Answer:"""
+                Answer:"""
 
-            response = requests.post(
-                "https://api.together.xyz/v1/chat/completions",
-                headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
-                json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-                      "messages": [{"role": "system", "content": "You are an expert in legal matters."},
-                                   {"role": "user", "content": prompt}], "temperature": 0.2}
-            )
+                # LLM API Call
+                response = requests.post(
+                    "https://api.together.xyz/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
+                    json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                          "messages": [{"role": "system", "content": "You are an expert in legal matters."},
+                                       {"role": "user", "content": prompt}], "temperature": 0.2}
+                )
 
-            answer = response.json()["choices"][0]["message"]["content"]
-            st.success("💡 AI Response:")
-            st.write(answer)
+                # Display Response
+                if response.status_code == 200:
+                    answer = response.json()["choices"][0]["message"]["content"]
+                    st.success("💡 AI Response:")
+                    st.write(answer)
+                else:
+                    st.error("⚠️ Failed to generate a response. Please try again.")
 
-st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
+            else:
+                st.warning("⚠️ No relevant legal documents found. Try refining your question.")
 
+        except Exception as e:
+            st.error(f"⚠️ An error occurred: {e}")
 
-# # 🔹 Footer
-# st.markdown("---")
-# st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
-
-
-
-
-
-
-
+# Footer
+st.markdown("---")
+st.markdown("🚀 Built with **Streamlit**.")
 
 
