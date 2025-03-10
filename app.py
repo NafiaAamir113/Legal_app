@@ -264,9 +264,6 @@
 # # st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
 
 
-
-
-
 import streamlit as st
 import requests
 import pinecone
@@ -296,37 +293,20 @@ index = pc.Index(INDEX_NAME)
 embedding_model = SentenceTransformer("BAAI/bge-large-en")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
-# Styling
-st.markdown(
-    """
-    <style>
-    .stTextInput>div>div>input {
-        font-size: 18px;
-        padding: 10px;
-    }
-    .stButton>button {
-        font-size: 18px;
-        padding: 10px;
-        background-color: #4CAF50;
-        color: white;
-        border-radius: 5px;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
 st.title("📚 Legal Retrieval-Augmented Generation (RAG) System")
 query = st.text_input("🔍 Enter your legal question:")
 
-if st.button("Generate Answer"):
-    if not query or len(query.split()) < 4:
+if query:
+    # Check for incomplete query
+    if len(query.split()) < 4:  # Simple heuristic for incomplete queries
         st.warning("⚠️ Your query seems incomplete. Please provide more details.")
         st.stop()
 
     with st.spinner("🔎 Searching..."):
+        query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
+
+        # ✅ Query Pinecone with error handling
         try:
-            query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
             st.error(f"❌ Pinecone query failed: {e}")
@@ -336,18 +316,28 @@ if st.button("Generate Answer"):
             st.warning("No relevant results found. Try rephrasing your query.")
             st.stop()
 
+        # Extract text chunks from results
         context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+
+        # Rerank results
         rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
         ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-        
+
+        # Select dynamic number of chunks (min available or 5)
         num_chunks = min(len(ranked_results), 5)
         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-        prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.\n\n
-        Context:\n{context_text}\n\n
-        Question: {query}\n\n
+        # Construct LLM prompt
+        prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
+
+        Context:
+        {context_text}
+
+        Question: {query}
+
         Answer:"""
 
+        # Query Together AI
         response = requests.post(
             "https://api.together.xyz/v1/chat/completions",
             headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
@@ -360,7 +350,7 @@ if st.button("Generate Answer"):
         st.success("💡 AI Response:")
         st.write(answer)
 
-st.markdown("🚀 Built with Streamlit")
+st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
 
 
 
