@@ -355,6 +355,6 @@ if st.button("🚀 Generate Answer") and query:
 
 # Footer
 st.markdown("---")
-                                          st.markdown("🚀 Built with **Streamlit**.")
+st.markdown("🚀 Built with **Streamlit**.")
 
 
