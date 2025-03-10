@@ -263,6 +263,7 @@
 # # st.markdown("---")
 # # st.markdown("🚀 Built with **Streamlit**, **Pinecone**, and **Llama-3.3-70B-Turbo** on **Together AI**.")
 
+
 import streamlit as st
 import requests
 import pinecone
@@ -293,7 +294,10 @@ embedding_model = SentenceTransformer("BAAI/bge-large-en")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
 # Page Title
-st.title("LEGAL ASSISTANT")
+st.title("⚖️ LEGAL ASSISTANT")
+
+# Short App Description
+st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
 
 # Input field
 query = st.text_input("Enter your legal question:")
@@ -357,8 +361,9 @@ if st.button("Generate Answer"):
         st.success("AI Response:")
         st.write(answer)
 
-# Footer
-st.markdown("<p style='text-align: center;'>Built with Streamlit</p>", unsafe_allow_html=True)
+# Footer with emoji
+st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
 
 
 
