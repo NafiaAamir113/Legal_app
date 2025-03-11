@@ -197,7 +197,6 @@
 # # Footer with emoji
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -264,9 +263,9 @@ if st.button("Generate Answer"):
         ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
 
         # Filter out low-relevance chunks (set a threshold)
-        relevance_threshold = 0.3
+        relevance_threshold = 0.4
         filtered_results = [r[0] for r in ranked_results if r[1] >= relevance_threshold]
-        
+
         if not filtered_results:
             st.warning("No highly relevant legal documents found. Try refining your query.")
             st.stop()
@@ -274,15 +273,20 @@ if st.button("Generate Answer"):
         # Construct context for LLM
         context_text = "\n\n".join(filtered_results)
 
-        # Construct LLM prompt
-        prompt = f"""You are a legal assistant. Use only the following retrieved legal documents to answer the question.
-        
+        # Construct LLM prompt with strict instructions
+        prompt = f"""
+        You are a legal assistant. Use only the following retrieved legal documents to answer the question.
+
         Context:
         {context_text}
 
         Question: {query}
 
-        If the context does not contain relevant information, reply: 'No relevant legal information found in the database.'"""
+        Answer the question **ONLY if the retrieved legal documents contain relevant information**. 
+        - If the key arguments are found, list them in a structured manner.
+        - If the context does not contain relevant information, reply: 
+          **"No relevant legal information found in the database."**
+        """
 
         # Query Together AI
         response = requests.post(
@@ -295,12 +299,13 @@ if st.button("Generate Answer"):
 
         answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
         
-        # Ensure AI response is not hallucinated
+        # Ensure AI response is strictly based on retrieved documents
         if "No relevant legal information found" in answer:
             st.warning("The AI could not find relevant legal information in the database.")
         else:
-            st.success("AI Response:")
+            st.success("📜 AI Response:")
             st.write(answer)
 
 # Footer with emoji
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
