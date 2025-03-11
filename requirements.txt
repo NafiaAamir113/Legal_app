@@ -3,5 +3,5 @@ pinecone
 sentence-transformers
 together
 requests
-pdfkit
+
 
