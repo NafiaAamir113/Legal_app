@@ -199,7 +199,6 @@
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -214,28 +213,22 @@ TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
 
 # Pinecone setup
 INDEX_NAME = "lawdata-index"
-
-def initialize_pinecone():
-    try:
-        pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
-        existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-        if INDEX_NAME not in existing_indexes:
-            st.error(f"Index '{INDEX_NAME}' not found.")
-            st.stop()
-        return pc.Index(INDEX_NAME)
-    except Exception as e:
-        st.error(f"Error initializing Pinecone: {e}")
+try:
+    pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+    existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+    if INDEX_NAME not in existing_indexes:
+        st.error(f"Index '{INDEX_NAME}' not found.")
         st.stop()
+    index = pc.Index(INDEX_NAME)
+except Exception as e:
+    st.error(f"Failed to initialize Pinecone: {e}")
+    st.stop()
 
-index = initialize_pinecone()
-
-# Load embedding models
-@st.cache_resource()
+# Load embedding and reranking models
+@st.cache_resource
 def load_models():
-    return (
-        SentenceTransformer("BAAI/bge-large-en"),
-        CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-    )
+    return (SentenceTransformer("BAAI/bge-large-en"), 
+            CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2"))
 
 embedding_model, reranker = load_models()
 
@@ -243,70 +236,117 @@ embedding_model, reranker = load_models()
 st.title("⚖️ LEGAL ASSISTANT")
 
 # Short App Description
-st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
+st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides structured legal reports.")
 
 # Input field
 query = st.text_input("Enter your legal question:")
 
 # Generate Answer Button
 if st.button("Generate Answer"):
-    if not query.strip():
+    if not query:
         st.warning("Please enter a legal question before generating an answer.")
         st.stop()
 
-    if len(query.split()) < 4:  # Simple heuristic for incomplete queries
+    # Check for incomplete query
+    if len(query.split()) < 4:
         st.warning("Your query seems incomplete. Please provide more details.")
         st.stop()
 
     with st.spinner("Searching..."):
         try:
             query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
-            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
-            st.error(f"Error querying Pinecone: {e}")
+            st.error(f"Failed to generate query embedding: {e}")
             st.stop()
 
-        if not search_results.get("matches"):
-            st.warning("No relevant results found. Try rephrasing your query.")
+        # Query Pinecone with increased top_k for better retrieval
+        try:
+            search_results = index.query(vector=query_embedding, top_k=15, include_metadata=True)
+        except Exception as e:
+            st.error(f"Pinecone query failed: {e}")
             st.stop()
 
-        # Extract text chunks and rerank
-        context_chunks = [match["metadata"].get("text", "") for match in search_results["matches"]]
-        rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
-        ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-        
-        # Select relevant context
-        context_text = "\n\n".join([r[0] for r in ranked_results[:min(len(ranked_results), 5)]])
-        
-        # Construct LLM prompt
+        # Stop execution if no documents are found
+        if not search_results or "matches" not in search_results or not search_results["matches"]:
+            st.warning("No relevant legal case found in the database. Please refine your query.")
+            st.stop()
+
+        # Extract text chunks and case citations
+        retrieved_cases = []
+        case_citations = []  
+        for match in search_results["matches"]:
+            if "text" in match["metadata"]:
+                case_text = match["metadata"]["text"]
+                case_source = match["metadata"].get("source", "No case reference available")  # ✅ Fix for "Unknown Case"
+                retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
+                case_citations.append(f"[{case_source}]" if case_source != "No case reference available" else "")
+
+        # Rerank results if more than one retrieved
+        if len(retrieved_cases) > 1:
+            rerank_scores = reranker.predict([(query, chunk) for chunk in retrieved_cases])
+            ranked_results = sorted(zip(retrieved_cases, rerank_scores), key=lambda x: x[1], reverse=True)
+        else:
+            ranked_results = [(chunk, 1.0) for chunk in retrieved_cases]
+
+        # Select top 5 case texts
+        num_chunks = min(len(ranked_results), 5)
+        context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
+
+        # 🔥 Improved LLM prompt to enforce structured report and prevent hallucination
         prompt = f"""
-        You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
-        
-        Context:
+        You are a legal assistant. Generate a **detailed legal report** using only the retrieved legal documents.
+
+        **Structure of the Report:**
+        1️⃣ **Introduction** - Overview of the case and key issues.
+        2️⃣ **Legal Arguments of Both Sides** - Arguments of appellant and respondent.
+        3️⃣ **Evidence & Court Evaluation** - How evidence was used and evaluated.
+        4️⃣ **Court’s Reasoning & Judgment** - Explanation of the final ruling.
+        5️⃣ **Conclusion** - Summary of legal implications.
+
+        **Important Rules:**
+        - **Cite referenced cases** in brackets, e.g., [1969 SCMR 564].
+        - **If no relevant case is found, state: 'No relevant case found in the database.'**
+        - **Do NOT generate or guess case citations. Only use retrieved case law.**
+        - **Ensure the appellant's full defense is included, including refund argument & procedural flaws.**
+        - **Accurately represent the prosecution's argument (focus on double payment fraud, not employment status).**
+        - **Mention key court findings, including lack of witness testimony (Assistant Commandant).**
+
+        **Context:**  
         {context_text}
-        
-        Question: {query}
-        
-        Answer:
+
+        **Question:** {query}
+
+        **Answer:**  
         """
 
+        # Query Together AI
         try:
             response = requests.post(
                 "https://api.together.xyz/v1/chat/completions",
                 headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
                 json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
                       "messages": [{"role": "system", "content": "You are an expert in legal matters."},
-                                   {"role": "user", "content": prompt}],
-                      "temperature": 0.2}
+                                   {"role": "user", "content": prompt}], "temperature": 0.2}
             )
-            response_json = response.json()
-            answer = response_json.get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
+
+            response_data = response.json()
+            answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+            if not answer or "No relevant case found" in answer:
+                answer = "No relevant case found in the database."
+
         except Exception as e:
-            st.error(f"Error contacting AI API: {e}")
+            st.error(f"AI query failed: {e}")
             st.stop()
-        
-        st.success("AI Response:")
-        st.write(answer)
+
+        # Display results
+        st.success("📜 **Legal Report Generated:**")
+        st.markdown(answer, unsafe_allow_html=True)
+
+        # Show referenced cases
+        if case_citations:
+            st.markdown("### 📌 **Referenced Cases:**")
+            st.markdown(", ".join(case_citations))
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
