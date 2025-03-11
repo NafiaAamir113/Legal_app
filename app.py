@@ -98,107 +98,6 @@
 #             st.error(f"⚠️ Error: {str(e)}")
 
 
-# import streamlit as st
-# import requests
-# import pinecone
-# from sentence_transformers import SentenceTransformer, CrossEncoder
-
-# # Streamlit page setup
-# st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
-
-# # Load secrets
-# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-# TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
-
-# # Pinecone setup
-# INDEX_NAME = "lawdata-index"
-# pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
-
-# # Check if index exists
-# existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-# if INDEX_NAME not in existing_indexes:
-#     st.error(f"Index '{INDEX_NAME}' not found.")
-#     st.stop()
-
-# # Initialize Pinecone index
-# index = pc.Index(INDEX_NAME)
-
-# # Load embedding models
-# embedding_model = SentenceTransformer("BAAI/bge-large-en")
-# reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-# # Page Title
-# st.title("⚖️ LEGAL ASSISTANT")
-
-# # Short App Description
-# st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
-
-# # Input field
-# query = st.text_input("Enter your legal question:")
-
-# # Generate Answer Button
-# if st.button("Generate Answer"):
-#     if not query:
-#         st.warning("Please enter a legal question before generating an answer.")
-#         st.stop()
-
-#     # Check for incomplete query
-#     if len(query.split()) < 4:  # Simple heuristic for incomplete queries
-#         st.warning("Your query seems incomplete. Please provide more details.")
-#         st.stop()
-
-#     with st.spinner("Searching..."):
-#         query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
-
-#         # Query Pinecone with error handling
-#         try:
-#             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
-#         except Exception as e:
-#             st.error(f"Pinecone query failed: {e}")
-#             st.stop()
-
-#         if not search_results or "matches" not in search_results or not search_results["matches"]:
-#             st.warning("No relevant results found. Try rephrasing your query.")
-#             st.stop()
-
-#         # Extract text chunks from results
-#         context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
-
-#         # Rerank results
-#         rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
-#         ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-
-#         # Select dynamic number of chunks (min available or 5)
-#         num_chunks = min(len(ranked_results), 5)
-#         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
-
-#         # Construct LLM prompt
-#         prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
-
-#         Context:
-#         {context_text}
-
-#         Question: {query}
-
-#         Answer:"""
-
-#         # Query Together AI
-#         response = requests.post(
-#             "https://api.together.xyz/v1/chat/completions",
-#             headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
-#             json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-#                   "messages": [{"role": "system", "content": "You are an expert in legal matters."},
-#                                {"role": "user", "content": prompt}], "temperature": 0.2}
-#         )
-
-#         answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
-#         st.success("AI Response:")
-#         st.write(answer)
-
-# # Footer with emoji
-# st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
-
-
 import streamlit as st
 import requests
 import pinecone
@@ -218,124 +117,225 @@ pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
 # Check if index exists
 existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
 if INDEX_NAME not in existing_indexes:
-    st.error(f"❌ Index '{INDEX_NAME}' not found.")
+    st.error(f"Index '{INDEX_NAME}' not found.")
     st.stop()
 
 # Initialize Pinecone index
 index = pc.Index(INDEX_NAME)
 
-# Load embedding & reranking models
+# Load embedding models
 embedding_model = SentenceTransformer("BAAI/bge-large-en")
 reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
 
+# Page Title
 st.title("⚖️ LEGAL ASSISTANT")
 
-st.markdown("This AI-powered legal assistant retrieves relevant legal documents and generates accurate legal reports.")
+# Short App Description
+st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
 
-# User Input
-query = st.text_input("🔍 Enter your legal query:")
+# Input field
+query = st.text_input("Enter your legal question:")
 
+# Generate Answer Button
 if st.button("Generate Answer"):
     if not query:
-        st.warning("⚠️ Please enter a legal question before generating an answer.")
+        st.warning("Please enter a legal question before generating an answer.")
         st.stop()
 
-    # Convert user query into embeddings
-    query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
-
-    # Query Pinecone for similar embeddings
-    try:
-        search_results = index.query(vector=query_embedding, top_k=15, include_metadata=True)
-    except Exception as e:
-        st.error(f"❌ Pinecone query failed: {e}")
+    # Check for incomplete query
+    if len(query.split()) < 4:  # Simple heuristic for incomplete queries
+        st.warning("Your query seems incomplete. Please provide more details.")
         st.stop()
 
-    # Handle missing results
-    if not search_results or "matches" not in search_results or not search_results["matches"]:
-        st.warning("⚠️ No relevant case found in the database. Please refine your query.")
-        st.stop()
+    with st.spinner("Searching..."):
+        query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
 
-    # Extract retrieved case text & embeddings
-    retrieved_cases = []
-    case_citations = []
-    retrieved_embeddings = []
+        # Query Pinecone with error handling
+        try:
+            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
+        except Exception as e:
+            st.error(f"Pinecone query failed: {e}")
+            st.stop()
 
-    for match in search_results["matches"]:
-        if "text" in match["metadata"]:
-            case_text = match["metadata"]["text"]
-            case_source = match["metadata"].get("source", "Unknown Case")
-            embedding_vector = match.get("values", [])
+        if not search_results or "matches" not in search_results or not search_results["matches"]:
+            st.warning("No relevant results found. Try rephrasing your query.")
+            st.stop()
 
-            retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
-            retrieved_embeddings.append(embedding_vector)
+        # Extract text chunks from results
+        context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
 
-            if case_source != "Unknown Case":
-                case_citations.append(f"[{case_source}]")
+        # Rerank results
+        rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
+        ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
 
-    # Stop execution if no valid cases
-    if not retrieved_cases:
-        st.warning("⚠️ No relevant case found in the database. Please refine your query.")
-        st.stop()
+        # Select dynamic number of chunks (min available or 5)
+        num_chunks = min(len(ranked_results), 5)
+        context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-    # Combine retrieved cases (limit to 5 for better context)
-    context_text = "\n\n".join(retrieved_cases[:5])
+        # Construct LLM prompt
+        prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
 
-    # 🔥 STRICT LLM Prompt to prevent hallucination
-    prompt = f"""
-    You are a legal assistant. Generate a legal report using **only the retrieved legal documents**.
-    
-    **Strict Rules:**
-    1️⃣ **Use ONLY retrieved legal documents. DO NOT generate any new cases, legal precedents, or statutes.**
-    2️⃣ **If the retrieved documents do not provide enough details, do NOT assume or infer missing information.**
-    3️⃣ **Cite the original case title and year EXACTLY as retrieved.**
-    4️⃣ **If no legal precedent is available, state: "No relevant legal precedent found in the database."**
+        Context:
+        {context_text}
 
-    📜 **Retrieved Legal Context:**  
-    {context_text}
+        Question: {query}
 
-    🔍 **Question:** {query}
+        Answer:"""
 
-    📝 **Answer:**  
-    """
-
-    # Query Together AI with both the user query & retrieved embeddings
-    try:
+        # Query Together AI
         response = requests.post(
             "https://api.together.xyz/v1/chat/completions",
             headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
-                "messages": [
-                    {"role": "system", "content": "You are an expert in legal matters."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.2,
-                "embeddings": retrieved_embeddings  # 🔥 Pass retrieved embeddings to LLM
-            }
+            json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                  "messages": [{"role": "system", "content": "You are an expert in legal matters."},
+                               {"role": "user", "content": prompt}], "temperature": 0.2}
         )
 
-        response_data = response.json()
-        answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+        answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
+        st.success("AI Response:")
+        st.write(answer)
 
-        if not answer or "No relevant case found" in answer:
-            st.warning("⚠️ No relevant legal case found in the database. Please refine your query.")
-            st.stop()
-
-    except Exception as e:
-        st.error(f"❌ AI query failed: {e}")
-        st.stop()
-
-    # Display results
-    st.success("📜 **Legal Report Generated:**")
-    st.markdown(answer, unsafe_allow_html=True)
-
-    # Show referenced cases
-    if case_citations:
-        st.markdown("### 📌 **Referenced Cases:**")
-        st.markdown(", ".join(set(case_citations)))
-
-# Footer
+# Footer with emoji
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
+
+# import streamlit as st
+# import requests
+# import pinecone
+# from sentence_transformers import SentenceTransformer, CrossEncoder
+
+# # Streamlit page setup
+# st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
+
+# # Load secrets
+# PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+# TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+
+# # Pinecone setup
+# INDEX_NAME = "lawdata-index"
+# pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+
+# # Check if index exists
+# existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+# if INDEX_NAME not in existing_indexes:
+#     st.error(f"❌ Index '{INDEX_NAME}' not found.")
+#     st.stop()
+
+# # Initialize Pinecone index
+# index = pc.Index(INDEX_NAME)
+
+# # Load embedding & reranking models
+# embedding_model = SentenceTransformer("BAAI/bge-large-en")
+# reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+# st.title("⚖️ LEGAL ASSISTANT")
+
+# st.markdown("This AI-powered legal assistant retrieves relevant legal documents and generates accurate legal reports.")
+
+# # User Input
+# query = st.text_input("🔍 Enter your legal query:")
+
+# if st.button("Generate Answer"):
+#     if not query:
+#         st.warning("⚠️ Please enter a legal question before generating an answer.")
+#         st.stop()
+
+#     # Convert user query into embeddings
+#     query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
+
+#     # Query Pinecone for similar embeddings
+#     try:
+#         search_results = index.query(vector=query_embedding, top_k=15, include_metadata=True)
+#     except Exception as e:
+#         st.error(f"❌ Pinecone query failed: {e}")
+#         st.stop()
+
+#     # Handle missing results
+#     if not search_results or "matches" not in search_results or not search_results["matches"]:
+#         st.warning("⚠️ No relevant case found in the database. Please refine your query.")
+#         st.stop()
+
+#     # Extract retrieved case text & embeddings
+#     retrieved_cases = []
+#     case_citations = []
+#     retrieved_embeddings = []
+
+#     for match in search_results["matches"]:
+#         if "text" in match["metadata"]:
+#             case_text = match["metadata"]["text"]
+#             case_source = match["metadata"].get("source", "Unknown Case")
+#             embedding_vector = match.get("values", [])
+
+#             retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
+#             retrieved_embeddings.append(embedding_vector)
+
+#             if case_source != "Unknown Case":
+#                 case_citations.append(f"[{case_source}]")
+
+#     # Stop execution if no valid cases
+#     if not retrieved_cases:
+#         st.warning("⚠️ No relevant case found in the database. Please refine your query.")
+#         st.stop()
+
+#     # Combine retrieved cases (limit to 5 for better context)
+#     context_text = "\n\n".join(retrieved_cases[:5])
+
+#     # 🔥 STRICT LLM Prompt to prevent hallucination
+#     prompt = f"""
+#     You are a legal assistant. Generate a legal report using **only the retrieved legal documents**.
+    
+#     **Strict Rules:**
+#     1️⃣ **Use ONLY retrieved legal documents. DO NOT generate any new cases, legal precedents, or statutes.**
+#     2️⃣ **If the retrieved documents do not provide enough details, do NOT assume or infer missing information.**
+#     3️⃣ **Cite the original case title and year EXACTLY as retrieved.**
+#     4️⃣ **If no legal precedent is available, state: "No relevant legal precedent found in the database."**
+
+#     📜 **Retrieved Legal Context:**  
+#     {context_text}
+
+#     🔍 **Question:** {query}
+
+#     📝 **Answer:**  
+#     """
+
+#     # Query Together AI with both the user query & retrieved embeddings
+#     try:
+#         response = requests.post(
+#             "https://api.together.xyz/v1/chat/completions",
+#             headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
+#             json={
+#                 "model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+#                 "messages": [
+#                     {"role": "system", "content": "You are an expert in legal matters."},
+#                     {"role": "user", "content": prompt}
+#                 ],
+#                 "temperature": 0.2,
+#                 "embeddings": retrieved_embeddings  # 🔥 Pass retrieved embeddings to LLM
+#             }
+#         )
+
+#         response_data = response.json()
+#         answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+
+#         if not answer or "No relevant case found" in answer:
+#             st.warning("⚠️ No relevant legal case found in the database. Please refine your query.")
+#             st.stop()
+
+#     except Exception as e:
+#         st.error(f"❌ AI query failed: {e}")
+#         st.stop()
+
+#     # Display results
+#     st.success("📜 **Legal Report Generated:**")
+#     st.markdown(answer, unsafe_allow_html=True)
+
+#     # Show referenced cases
+#     if case_citations:
+#         st.markdown("### 📌 **Referenced Cases:**")
+#         st.markdown(", ".join(set(case_citations)))
+
+# # Footer
+# st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
 
 
