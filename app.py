@@ -198,7 +198,6 @@
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -261,7 +260,7 @@ if st.button("Generate Answer"):
 
         # Query Pinecone with increased top_k for better retrieval
         try:
-            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)  # 🔥 Increased top_k
+            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
@@ -273,11 +272,13 @@ if st.button("Generate Answer"):
 
         # Extract text chunks and citations from results
         retrieved_cases = []
+        case_citations = []  # Stores case names for reference in AI response
         for match in search_results["matches"]:
             if "text" in match["metadata"]:
                 case_text = match["metadata"]["text"]
                 case_source = match["metadata"].get("source", "Unknown Case")  # Adds citation if available
-                retrieved_cases.append(f"📜 **{case_source}:**\n{case_text}")
+                retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
+                case_citations.append(f"[{case_source}]")  # Save for AI reference
 
         # Rerank results if more than one retrieved
         if len(retrieved_cases) > 1:
@@ -290,7 +291,7 @@ if st.button("Generate Answer"):
         num_chunks = min(len(ranked_results), 5)
         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-        # 🔥 Improved LLM prompt to prevent hallucination
+        # 🔥 Improved LLM prompt to force citation inclusion
         prompt = f"""You are a legal assistant. Your job is to summarize only the retrieved legal cases and provide a response based strictly on the given context.
 
         Context:
@@ -299,7 +300,9 @@ if st.button("Generate Answer"):
         Question: {query}
 
         Answer:
-        (If the retrieved cases do not contain a relevant answer, state: 'No relevant case found in the database.')"""
+        - Ensure that each key legal point references a retrieved case.
+        - If a legal point is derived from a specific case, mention the case in brackets (e.g., [1969 SCMR 564]).
+        - If the retrieved cases do not contain a relevant answer, state: 'No relevant case found in the database.'"""
 
         # Query Together AI
         try:
@@ -321,8 +324,14 @@ if st.button("Generate Answer"):
             st.error(f"AI query failed: {e}")
             st.stop()
 
+        # Display results
         st.success("AI Response:")
         st.write(answer)
+
+        # Show referenced cases
+        if case_citations:
+            st.markdown("### 📌 Referenced Cases:")
+            st.markdown(", ".join(case_citations))
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
