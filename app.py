@@ -338,7 +338,6 @@
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit, Pinecone, and Llama-3.3-70B-Turbo on Together AI</p>", unsafe_allow_html=True)
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -403,14 +402,14 @@ if st.button("Generate Report"):
     for match in search_results["matches"]:
         if "text" in match["metadata"]:
             case_text = match["metadata"]["text"]
-            case_source = match["metadata"].get("source", "Unknown Case")
+            case_source = match["metadata"].get("source", None)
             embedding_vector = match.get("values", [])
 
-            retrieved_cases.append(f"{case_text}")  # ✅ No unnecessary formatting
+            retrieved_cases.append(case_text)  # ✅ Keeps text clean
             retrieved_embeddings.append(embedding_vector)
 
-            if case_source != "Unknown Case":
-                case_citations.append(f"{case_source}")  # ✅ Case citations without brackets
+            if case_source:
+                case_citations.append(case_source)  # ✅ Avoids "Unknown Case"
 
     # Stop execution if no valid cases
     if not retrieved_cases:
@@ -422,8 +421,8 @@ if st.button("Generate Report"):
 
     # 🔥 STRICT LLM Prompt to prevent hallucination
     prompt = f"""
-    Generate a **formal legal report** based only on the provided legal materials. 
-    Ensure the report follows a **professional tone** and is formatted for legal use.
+    You are a legal assistant. Generate a **formal legal report** based on the provided legal materials.  
+    Ensure the report follows a **professional tone** and a structured legal format.
 
     **Report Structure:**  
     - **Introduction**: Overview of the case.  
@@ -433,10 +432,10 @@ if st.button("Generate Report"):
     - **Final Ruling**: The court’s decision.  
     - **Citations**: Legal sources used.  
 
-    **Important Rules:**  
-    - **Do NOT fabricate case law, statutes, or legal principles.**  
-    - **Ensure citations are included naturally in the report.**  
-    - **Do NOT mention retrieval or missing data.**  
+    **Strict Rules:**  
+    - **Use ONLY the retrieved legal documents. Do NOT generate new cases, legal precedents, or statutes.**  
+    - **Ensure case citations appear naturally in the report.**  
+    - **Do NOT mention retrieval sources or missing data.**  
 
     **Legal Context:**  
     {context_text}
@@ -482,5 +481,6 @@ if st.button("Generate Report"):
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit, Pinecone, and Llama-3.3-70B-Turbo on Together AI</p>", unsafe_allow_html=True)
+
 
 
