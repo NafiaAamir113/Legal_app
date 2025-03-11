@@ -197,6 +197,11 @@
 # # Footer with emoji
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
+
+
+
+
+
 import streamlit as st
 import requests
 import pinecone
