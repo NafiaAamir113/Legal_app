@@ -292,7 +292,7 @@ if st.button("Generate Answer"):
         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
         # 🔥 Improved LLM prompt to force citation inclusion
-        prompt = f"""You are a legal assistant. Your job is to provide detailed answers from the retrieved legal cases and provide a response based strictly on the given context.
+        prompt = f"""You are a legal assistant. Your job is to summarize only the retrieved legal cases and provide a response based strictly on the given context.
 
         Context:
         {context_text}
