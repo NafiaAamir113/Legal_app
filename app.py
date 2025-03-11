@@ -198,7 +198,6 @@
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -259,16 +258,17 @@ if st.button("Generate Answer"):
             st.error(f"Failed to generate query embedding: {e}")
             st.stop()
 
-        # Query Pinecone with error handling
+        # Query Pinecone
         try:
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
 
+        # ✅ Stop execution if no documents are found
         if not search_results or "matches" not in search_results or not search_results["matches"]:
-            st.warning("No relevant results found. Try rephrasing your query.")
-            st.stop()
+            st.warning("No relevant legal case found in the database. Please refine your query.")
+            st.stop()  # ✅ Ensures AI does not generate a fake response
 
         # Extract text chunks from results
         context_chunks = [match["metadata"]["text"] for match in search_results["matches"] if "text" in match["metadata"]]
@@ -280,11 +280,11 @@ if st.button("Generate Answer"):
         else:
             ranked_results = [(chunk, 1.0) for chunk in context_chunks]
 
-        # Select the top context chunks (dynamic based on availability)
+        # Select top-ranked context chunks
         num_chunks = min(len(ranked_results), 5)
         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-        # Construct LLM prompt
+        # ✅ Updated LLM prompt to prevent hallucination
         prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
 
         Context:
@@ -292,9 +292,10 @@ if st.button("Generate Answer"):
 
         Question: {query}
 
-        Answer:"""
+        Answer:
+        (If there is no relevant context, respond with 'No relevant case found in the database.')"""
 
-        # Query Together AI with error handling
+        # Query Together AI
         try:
             response = requests.post(
                 "https://api.together.xyz/v1/chat/completions",
@@ -307,8 +308,9 @@ if st.button("Generate Answer"):
             response_data = response.json()
             answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
-            if not answer:
-                answer = "No valid response from AI."
+            if not answer or "No relevant case found" in answer:
+                answer = "No relevant case found in the database."
+
         except Exception as e:
             st.error(f"AI query failed: {e}")
             st.stop()
@@ -318,5 +320,6 @@ if st.button("Generate Answer"):
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
 
 
