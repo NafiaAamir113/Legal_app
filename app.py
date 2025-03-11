@@ -200,7 +200,6 @@
 
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -264,7 +263,6 @@ if st.button("Generate Answer"):
         # Increase top_k to fetch more cases
         try:
             search_results = index.query(vector=query_embedding, top_k=20, include_metadata=True)
-            st.write("DEBUG: Retrieved Cases", search_results)  # ✅ Debug log
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
@@ -331,3 +329,6 @@ if st.button("Generate Answer"):
         # Display results
         st.success("📜 **Legal Report Generated:**")
         st.markdown(answer, unsafe_allow_html=True)
+
+# Footer with emoji
+st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
