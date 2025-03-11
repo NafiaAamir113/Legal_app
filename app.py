@@ -202,7 +202,6 @@
 import streamlit as st
 import requests
 import pinecone
-import pdfkit
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 # Streamlit page setup
@@ -345,18 +344,6 @@ if st.button("Generate Answer"):
         if case_citations:
             st.markdown("### 📌 **Referenced Cases:**")
             st.markdown(", ".join(case_citations))
-
-        # **🔽 Add Option to Download Report as PDF**
-        def create_pdf(report_text):
-            options = {'quiet': ''}
-            pdf_file = "legal_report.pdf"
-            pdfkit.from_string(report_text, pdf_file, options=options)
-            return pdf_file
-
-        if st.button("Download Report as PDF"):
-            pdf_file = create_pdf(answer)
-            with open(pdf_file, "rb") as f:
-                st.download_button(label="📥 Download PDF", data=f, file_name="Legal_Report.pdf", mime="application/pdf")
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
