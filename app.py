@@ -246,7 +246,7 @@ if st.button("Generate Answer"):
 
         # Query Pinecone with error handling
         try:
-            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=8, include_metadata=True)  # Increased top_k
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
@@ -262,8 +262,8 @@ if st.button("Generate Answer"):
         rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
         ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
 
-        # Filter out low-relevance chunks (set a threshold)
-        relevance_threshold = 0.4
+        # Filter out low-relevance chunks (Lowered threshold to 0.2)
+        relevance_threshold = 0.2
         filtered_results = [r[0] for r in ranked_results if r[1] >= relevance_threshold]
 
         if not filtered_results:
@@ -273,19 +273,20 @@ if st.button("Generate Answer"):
         # Construct context for LLM
         context_text = "\n\n".join(filtered_results)
 
-        # Construct LLM prompt with strict instructions
+        # **🔹 Improved Prompt:**
         prompt = f"""
-        You are a legal assistant. Use only the following retrieved legal documents to answer the question.
+        You are a legal assistant. Use only the retrieved legal documents below to answer the question.
 
-        Context:
+        **Context:**
         {context_text}
 
-        Question: {query}
+        **Question:** {query}
 
-        Answer the question **ONLY if the retrieved legal documents contain relevant information**. 
-        - If the key arguments are found, list them in a structured manner.
-        - If the context does not contain relevant information, reply: 
-          **"No relevant legal information found in the database."**
+        **Instructions for Response:**
+        - If legal arguments, evidence, and court reasoning are found, provide a structured report.
+        - If partial information exists, generate a report based on what is available.
+        - If no relevant legal information is found, explicitly state: 
+          **'Some details are missing from the database. Here’s what I found:'** and then summarize the available information.
         """
 
         # Query Together AI
@@ -308,4 +309,5 @@ if st.button("Generate Answer"):
 
 # Footer with emoji
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
 
