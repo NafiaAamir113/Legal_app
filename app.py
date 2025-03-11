@@ -201,6 +201,7 @@
 import streamlit as st
 import requests
 import pinecone
+import pdfkit
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 # Streamlit page setup
@@ -235,7 +236,7 @@ embedding_model, reranker = load_models()
 st.title("⚖️ LEGAL ASSISTANT")
 
 # Short App Description
-st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
+st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides structured legal reports.")
 
 # Input field
 query = st.text_input("Enter your legal question:")
@@ -260,7 +261,7 @@ if st.button("Generate Answer"):
 
         # Query Pinecone with increased top_k for better retrieval
         try:
-            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=15, include_metadata=True)
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
@@ -270,15 +271,15 @@ if st.button("Generate Answer"):
             st.warning("No relevant legal case found in the database. Please refine your query.")
             st.stop()
 
-        # Extract text chunks and citations from results
+        # Extract text chunks and case citations
         retrieved_cases = []
-        case_citations = []  # Stores case names for reference in AI response
+        case_citations = []  
         for match in search_results["matches"]:
             if "text" in match["metadata"]:
                 case_text = match["metadata"]["text"]
-                case_source = match["metadata"].get("source", "Unknown Case")  # Adds citation if available
+                case_source = match["metadata"].get("source", "Unknown Case")
                 retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
-                case_citations.append(f"[{case_source}]")  # Save for AI reference
+                case_citations.append(f"[{case_source}]" if case_source != "Unknown Case" else "")
 
         # Rerank results if more than one retrieved
         if len(retrieved_cases) > 1:
@@ -291,18 +292,29 @@ if st.button("Generate Answer"):
         num_chunks = min(len(ranked_results), 5)
         context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
 
-        # 🔥 Improved LLM prompt to force citation inclusion
-        prompt = f"""You are a legal assistant. Your job is to summarize only the retrieved legal cases and provide a response based strictly on the given context.
+        # 🔥 Improved LLM prompt to enforce structured report
+        prompt = f"""
+        You are a legal assistant. Generate a **detailed legal report** using only the retrieved legal documents.
 
-        Context:
+        **Structure of the Report:**
+        1️⃣ **Introduction** - Overview of the case and key issues.
+        2️⃣ **Legal Arguments of Both Sides** - Arguments of appellant and respondent.
+        3️⃣ **Evidence & Court Evaluation** - How evidence was used and evaluated.
+        4️⃣ **Court’s Reasoning & Judgment** - Explanation of the final ruling.
+        5️⃣ **Conclusion** - Summary of legal implications.
+
+        **Important:**
+        - **Cite referenced cases** in brackets, e.g., [1969 SCMR 564].
+        - **If no relevant case is found, state: 'No relevant case found in the database.'**
+        - **Do NOT generate any legal reasoning beyond the retrieved documents.**
+
+        **Context:**  
         {context_text}
 
-        Question: {query}
+        **Question:** {query}
 
-        Answer:
-        - Ensure that each key legal point references a retrieved case.
-        - If a legal point is derived from a specific case, mention the case in brackets (e.g., [1969 SCMR 564]).
-        - If the retrieved cases do not contain a relevant answer, state: 'No relevant case found in the database.'"""
+        **Answer:**  
+        """
 
         # Query Together AI
         try:
@@ -325,16 +337,32 @@ if st.button("Generate Answer"):
             st.stop()
 
         # Display results
-        st.success("AI Response:")
-        st.write(answer)
+        st.success("📜 **Legal Report Generated:**")
+        st.markdown(answer, unsafe_allow_html=True)
 
         # Show referenced cases
         if case_citations:
-            st.markdown("### 📌 Referenced Cases:")
+            st.markdown("### 📌 **Referenced Cases:**")
             st.markdown(", ".join(case_citations))
+
+        # **🔽 Add Option to Download Report as PDF**
+        def create_pdf(report_text):
+            options = {'quiet': ''}
+            pdf_file = "legal_report.pdf"
+            pdfkit.from_string(report_text, pdf_file, options=options)
+            return pdf_file
+
+        if st.button("Download Report as PDF"):
+            pdf_file = create_pdf(answer)
+            with open(pdf_file, "rb") as f:
+                st.download_button(label="📥 Download PDF", data=f, file_name="Legal_Report.pdf", mime="application/pdf")
 
 # Footer
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
+
+
+       
 
 
 
