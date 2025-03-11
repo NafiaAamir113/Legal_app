@@ -199,6 +199,8 @@
 # st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
 
 
+
+
 import streamlit as st
 import requests
 import pinecone
@@ -259,57 +261,43 @@ if st.button("Generate Answer"):
             st.error(f"Failed to generate query embedding: {e}")
             st.stop()
 
-        # Query Pinecone with increased top_k for better retrieval
+        # Increase top_k to fetch more cases
         try:
-            search_results = index.query(vector=query_embedding, top_k=15, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=20, include_metadata=True)
+            st.write("DEBUG: Retrieved Cases", search_results)  # ✅ Debug log
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
 
-        # Stop execution if no documents are found
+        # Handle missing case results
         if not search_results or "matches" not in search_results or not search_results["matches"]:
             st.warning("No relevant legal case found in the database. Please refine your query.")
             st.stop()
 
-        # Extract text chunks and case citations
+        # Extract retrieved cases
         retrieved_cases = []
-        case_citations = []  
         for match in search_results["matches"]:
             if "text" in match["metadata"]:
                 case_text = match["metadata"]["text"]
-                case_source = match["metadata"].get("source", "No case reference available")  # ✅ Fix for "Unknown Case"
+                case_source = match["metadata"].get("source", "No case reference available")
                 retrieved_cases.append(f"📜 **[{case_source}]**\n{case_text}")
-                case_citations.append(f"[{case_source}]" if case_source != "No case reference available" else "")
 
-        # Rerank results if more than one retrieved
-        if len(retrieved_cases) > 1:
-            rerank_scores = reranker.predict([(query, chunk) for chunk in retrieved_cases])
-            ranked_results = sorted(zip(retrieved_cases, rerank_scores), key=lambda x: x[1], reverse=True)
-        else:
-            ranked_results = [(chunk, 1.0) for chunk in retrieved_cases]
+        # If no valid cases, do NOT generate a response
+        if not retrieved_cases:
+            st.warning("No relevant legal case found in the database. Please refine your query.")
+            st.stop()
 
-        # Select top 5 case texts
-        num_chunks = min(len(ranked_results), 5)
-        context_text = "\n\n".join([r[0] for r in ranked_results[:num_chunks]])
+        # Use retrieved legal cases ONLY
+        context_text = "\n\n".join(retrieved_cases[:5])  # Use up to 5 retrieved cases
 
-        # 🔥 Improved LLM prompt to enforce structured report and prevent hallucination
+        # Strict LLM Prompt (No Hallucination)
         prompt = f"""
-        You are a legal assistant. Generate a **detailed legal report** using only the retrieved legal documents.
+        You are a legal assistant. Generate a response based **only on the retrieved legal documents**. 
 
-        **Structure of the Report:**
-        1️⃣ **Introduction** - Overview of the case and key issues.
-        2️⃣ **Legal Arguments of Both Sides** - Arguments of appellant and respondent.
-        3️⃣ **Evidence & Court Evaluation** - How evidence was used and evaluated.
-        4️⃣ **Court’s Reasoning & Judgment** - Explanation of the final ruling.
-        5️⃣ **Conclusion** - Summary of legal implications.
-
-        **Important Rules:**
-        - **Cite referenced cases** in brackets, e.g., [1969 SCMR 564].
-        - **If no relevant case is found, state: 'No relevant case found in the database.'**
-        - **Do NOT generate or guess case citations. Only use retrieved case law.**
-        - **Ensure the appellant's full defense is included, including refund argument & procedural flaws.**
-        - **Accurately represent the prosecution's argument (focus on double payment fraud, not employment status).**
-        - **Mention key court findings, including lack of witness testimony (Assistant Commandant).**
+        **Rules:**
+        - **Use only the provided retrieved legal documents. Do NOT generate any information that is not in the retrieved cases.**
+        - **If no relevant case is found, simply state: 'No relevant case found in the database.'**
+        - **Ensure accuracy in representing the case details, legal arguments, and judicial reasoning.**
 
         **Context:**  
         {context_text}
@@ -333,7 +321,8 @@ if st.button("Generate Answer"):
             answer = response_data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
 
             if not answer or "No relevant case found" in answer:
-                answer = "No relevant case found in the database."
+                st.warning("No relevant legal case found in the database. Please refine your query.")
+                st.stop()
 
         except Exception as e:
             st.error(f"AI query failed: {e}")
@@ -342,23 +331,3 @@ if st.button("Generate Answer"):
         # Display results
         st.success("📜 **Legal Report Generated:**")
         st.markdown(answer, unsafe_allow_html=True)
-
-        # Show referenced cases
-        if case_citations:
-            st.markdown("### 📌 **Referenced Cases:**")
-            st.markdown(", ".join(case_citations))
-
-# Footer
-st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
-
-
-
-
-
-
-       
-
-
-
-
-
