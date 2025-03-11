@@ -201,7 +201,6 @@
 
 
 
-
 import streamlit as st
 import requests
 import pinecone
@@ -251,7 +250,7 @@ if st.button("Generate Answer"):
 
         # Query Pinecone with expanded top_k for detailed reports
         try:
-            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)
+            search_results = index.query(vector=query_embedding, top_k=10, include_metadata=True)  # Increased top_k
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
@@ -278,20 +277,23 @@ if st.button("Generate Answer"):
         # Construct context for LLM
         context_text = "\n\n".join(filtered_results)
 
-        # **🔹 STRICT RAG PROMPT (NO HALLUCINATION)**
+        # **🔹 Improved Prompt for Complete RAG Compliance**
         prompt = f"""
-        You are a legal assistant. Your task is to generate an answer **strictly** based on the retrieved legal documents. 
+        You are a legal assistant. Use only the retrieved legal documents below to answer the question.
 
         **Context:**
         {context_text}
 
         **Question:** {query}
 
-        **Rules:**
-        1. **Use ONLY the information found in the context.**  
-        2. **DO NOT add external information or assume facts.**  
-        3. **If the context does not provide an answer, simply say:**
-           **"The database does not contain relevant legal information to fully answer this query."**
+        **Instructions for Response:**
+        - Extract and summarize ALL key legal arguments from the case.
+        - Clearly outline both the appellant's and respondent's arguments.
+        - List the evidence used and how the court evaluated it.
+        - Explain the specific reasons why the court overturned or upheld the conviction.
+        - If partial information is available, structure the report based on what is present.
+        - If NO relevant legal information is found, explicitly state:
+          **"No relevant legal information found in the database."**
         """
 
         # Query Together AI
@@ -300,13 +302,13 @@ if st.button("Generate Answer"):
             headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
             json={"model": "meta-llama/Llama-3.3-70B-Instruct-Turbo",
                   "messages": [{"role": "system", "content": "You are an expert in legal matters."},
-                               {"role": "user", "content": prompt}], "temperature": 0.0}  # **STRICT FACTUAL MODE**
+                               {"role": "user", "content": prompt}], "temperature": 0.2}
         )
 
         answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
         
         # Ensure AI response is strictly based on retrieved documents
-        if "The database does not contain relevant legal information" in answer:
+        if "No relevant legal information found" in answer:
             st.warning("The AI could not find relevant legal information in the database.")
         else:
             st.success("📜 AI Response:")
@@ -314,6 +316,7 @@ if st.button("Generate Answer"):
 
 # Footer with emoji
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
 
 
 
