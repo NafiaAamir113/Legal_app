@@ -103,68 +103,61 @@ import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
+from sentence_transformers.util import cos_sim
 
-# Set Streamlit page config
+# ------------------- Streamlit Page Config -------------------
 st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
 
-# Load secrets
-PINECONE_API_KEY = st.secrets.get("PINECONE_API_KEY")
-TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY")
-HF_TOKEN = st.secrets.get("HF_TOKEN")
+# ------------------- Load Secrets -------------------
+PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+HF_TOKEN = st.secrets["HF_TOKEN"]  # Hugging Face Token
 
-# Validate secrets
-if not PINECONE_API_KEY or not TOGETHER_AI_API_KEY or not HF_TOKEN:
-    st.error("❌ One or more secrets (PINECONE_API_KEY, TOGETHER_AI_API_KEY, HF_TOKEN) are missing.")
-    st.stop()
-
-# Initialize Pinecone
+# ------------------- Pinecone Setup -------------------
 INDEX_NAME = "lawdata-index"
 pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
 
-# Check if index exists
 existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
 if INDEX_NAME not in existing_indexes:
-    st.error(f"❌ Pinecone index '{INDEX_NAME}' not found.")
+    st.error(f"Index '{INDEX_NAME}' not found in Pinecone.")
     st.stop()
 
-# Load Pinecone index
 index = pc.Index(INDEX_NAME)
 
-# Load SentenceTransformer model with fallback
-try:
-    st.info("🔄 Loading embedding model: BAAI/bge-large-en")
-    embedding_model = SentenceTransformer("BAAI/bge-large-en", use_auth_token=HF_TOKEN)
-    st.success("✅ Loaded 'BAAI/bge-large-en'")
-except Exception as e:
-    st.warning("⚠️ Failed to load 'BAAI/bge-large-en'. Trying fallback model...")
+# ------------------- Load Embedding Models -------------------
+def load_embedding_model():
     try:
-        embedding_model = SentenceTransformer("all-MiniLM-L6-v2", use_auth_token=HF_TOKEN)
-        st.success("✅ Loaded fallback model 'all-MiniLM-L6-v2'")
-    except Exception as fallback_error:
-        st.error("❌ All embedding models failed to load.")
-        st.stop()
+        return SentenceTransformer("BAAI/bge-large-en", use_auth_token=HF_TOKEN)
+    except Exception as e:
+        st.warning("⚠️ Could not load 'BAAI/bge-large-en'. Trying fallback model...")
+        try:
+            return SentenceTransformer("all-MiniLM-L6-v2", use_auth_token=HF_TOKEN)
+        except Exception as e2:
+            st.error("❌ All embedding models failed to load.")
+            st.stop()
 
-# Load CrossEncoder for reranking
+embedding_model = load_embedding_model()
+
+# ------------------- Load CrossEncoder Reranker -------------------
 try:
-    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2", use_auth_token=HF_TOKEN)
 except Exception as e:
-    st.error("❌ Failed to load CrossEncoder model.")
+    st.error(f"❌ Failed to load reranker model: {e}")
     st.stop()
 
-# Page title
+# ------------------- UI Title & Description -------------------
 st.title("⚖️ LEGAL ASSISTANT")
 st.markdown("This AI-powered legal assistant retrieves relevant legal documents and provides accurate responses to your legal queries.")
 
-# Input field
+# ------------------- User Input -------------------
 query = st.text_input("Enter your legal question:")
 
-# Button to generate answer
+# ------------------- Generate Answer -------------------
 if st.button("Generate Answer"):
     if not query:
         st.warning("Please enter a legal question before generating an answer.")
         st.stop()
 
-    # Check for too short queries
     if len(query.split()) < 4:
         st.warning("Your query seems incomplete. Please provide more details.")
         st.stop()
@@ -173,33 +166,33 @@ if st.button("Generate Answer"):
         try:
             query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
         except Exception as e:
-            st.error(f"❌ Failed to generate embedding: {e}")
+            st.error(f"Failed to embed query: {e}")
             st.stop()
 
-        # Query Pinecone
         try:
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
-            st.error(f"❌ Pinecone query failed: {e}")
+            st.error(f"Pinecone query failed: {e}")
             st.stop()
 
         if not search_results or "matches" not in search_results or not search_results["matches"]:
             st.warning("No relevant results found. Try rephrasing your query.")
             st.stop()
 
-        # Extract chunks and rerank
         context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+
+        # Rerank results
         try:
             rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
+            ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
         except Exception as e:
-            st.error(f"❌ Reranking failed: {e}")
-            st.stop()
+            st.warning("Reranking failed. Using original order.")
+            ranked_results = [(chunk, 0) for chunk in context_chunks]
 
-        ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-        top_chunks = [chunk for chunk, _ in ranked_results[:5]]
+        top_chunks = [r[0] for r in ranked_results[:min(5, len(ranked_results))]]
         context_text = "\n\n".join(top_chunks)
 
-        # Prepare prompt
+        # LLM Prompt
         prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
 
 Context:
@@ -209,7 +202,7 @@ Question: {query}
 
 Answer:"""
 
-        # Call Together AI
+        # Query Together AI
         try:
             response = requests.post(
                 "https://api.together.xyz/v1/chat/completions",
@@ -226,15 +219,14 @@ Answer:"""
                     "temperature": 0.2
                 }
             )
-            response_json = response.json()
-            answer = response_json.get("choices", [{}])[0].get("message", {}).get("content", "⚠️ No valid response from AI.")
+            answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "⚠️ No valid response from AI.")
         except Exception as e:
-            st.error(f"❌ Failed to get response from Together AI: {e}")
+            st.error(f"⚠️ Failed to get response from Together AI: {e}")
             st.stop()
 
-        # Display result
         st.success("AI Response:")
         st.write(answer)
 
-# Footer
+# ------------------- Footer -------------------
 st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
+
