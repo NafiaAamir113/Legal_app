@@ -1,6 +1,9 @@
 streamlit
 pinecone
-sentence-transformers
+# sentence-transformers
 together
 requests
 torch
+sentence-transformers==2.2.0
+transformers==4.21.0
+
