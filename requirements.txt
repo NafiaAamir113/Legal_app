@@ -3,5 +3,8 @@ pinecone
 sentence-transformers
 together
 requests
+torch
+
+
 
 
