@@ -240,96 +240,58 @@
 
 import os
 import streamlit as st
-import requests
-from sentence_transformers import SentenceTransformer, CrossEncoder
+import asyncio
 from huggingface_hub import login
-from pinecone import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 
-# --- PAGE SETUP ---
-st.set_page_config(page_title="Legal Assistant", layout="wide")
+# Optional: Avoid torch/classes crash from streamlit
+os.environ["STREAMLIT_WATCHER_TYPE"] = "none"
+
+# Load secrets safely
+HF_TOKEN = st.secrets.get("HF_TOKEN", None)
+PINECONE_API_KEY = st.secrets.get("PINECONE_API_KEY", None)
+TOGETHER_AI_API_KEY = st.secrets.get("TOGETHER_AI_API_KEY", None)
+
+# Hugging Face login (optional)
+if HF_TOKEN:
+    try:
+        login(token=HF_TOKEN)
+        st.info("🔐 Logged into Hugging Face successfully!")
+    except Exception as e:
+        st.warning("⚠️ Hugging Face login failed: " + str(e))
+else:
+    st.warning("⚠️ No Hugging Face token found in secrets — proceeding without login.")
+
+# Initialize Pinecone (updated SDK usage)
+pc = Pinecone(api_key=PINECONE_API_KEY)
+
+# Example: Check if index exists or create it
+index_name = "my_index"
+dimension = 1536
+
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=dimension,
+        metric="euclidean",
+        spec=ServerlessSpec(
+            cloud="aws",
+            region="us-west-2"
+        )
+    )
+
+# Streamlit UI
+st.set_page_config(page_title="⚖️ Legal Assistant", layout="wide")
+
 st.title("⚖️ LEGAL ASSISTANT")
 st.markdown("Ask legal questions and get AI-powered answers from legal documents.")
 
-# --- SECRETS ---
-HF_TOKEN = st.secrets["HF_TOKEN"]
-PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
-TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
-INDEX_NAME = "lawdata-index"
+# Ask user a question
+user_question = st.text_input("🔎 Ask a legal question:")
 
-# --- HUGGING FACE LOGIN ---
-login(token=HF_TOKEN)
-
-# --- LOAD MODELS ---
-@st.cache_resource(show_spinner="Loading models...")
-def load_models():
-    embedding_model = SentenceTransformer("BAAI/bge-large-en")
-    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-    return embedding_model, reranker
-
-embedding_model, reranker = load_models()
-
-# --- CONNECT TO PINECONE ---
-pc = Pinecone(api_key=PINECONE_API_KEY)
-index = pc.Index(INDEX_NAME)
-
-# --- USER INPUT ---
-query = st.text_input("Enter your legal question:")
-
-if st.button("Generate Answer"):
-    if not query or len(query.split()) < 4:
-        st.warning("Please enter a more detailed legal question.")
-        st.stop()
-
-    with st.spinner("Retrieving and processing documents..."):
-        try:
-            query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
-            search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
-        except Exception as e:
-            st.error(f"Error querying Pinecone: {e}")
-            st.stop()
-
-        matches = search_results.get("matches", [])
-        if not matches:
-            st.warning("No relevant documents found. Try rephrasing your question.")
-            st.stop()
-
-        context_chunks = [match["metadata"]["text"] for match in matches]
-        rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
-        ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-        context_text = "\n\n".join([r[0] for r in ranked_results[:3]])
-
-        prompt = f"""You are a legal assistant. Use the context below to answer the question clearly and concisely.
-
-Context:
-{context_text}
-
-Question: {query}
-
-Answer:"""
-
-        try:
-            response = requests.post(
-                "https://api.together.xyz/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {TOGETHER_AI_API_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "meta-llama/Llama-3-70B-Instruct",
-                    "messages": [
-                        {"role": "system", "content": "You are an expert legal assistant."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "temperature": 0.2
-                }
-            )
-            response_json = response.json()
-            answer = response_json.get("choices", [{}])[0].get("message", {}).get("content", "No answer generated.")
-        except Exception as e:
-            st.error(f"Error calling Together AI: {e}")
-            st.stop()
-
-        st.success("AI Response:")
-        st.write(answer)
+if user_question:
+    with st.spinner("Thinking..."):
+        # Replace this with your actual response generation logic
+        st.success(f"✅ You asked: **{user_question}**\n\n📄 *Response will go here.*")
 
 
