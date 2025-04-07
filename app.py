@@ -238,29 +238,28 @@
 
 
 
+import os
 import streamlit as st
 import requests
-import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from huggingface_hub import login
+from pinecone import Pinecone
 
-# Set Streamlit page layout
-st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
+# --- PAGE SETUP ---
+st.set_page_config(page_title="Legal Assistant", layout="wide")
+st.title("⚖️ LEGAL ASSISTANT")
+st.markdown("Ask legal questions and get AI-powered answers from legal documents.")
 
-# Load secrets
+# --- SECRETS ---
 HF_TOKEN = st.secrets["HF_TOKEN"]
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
+INDEX_NAME = "lawdata-index"
 
-# Authenticate HuggingFace
+# --- HUGGING FACE LOGIN ---
 login(token=HF_TOKEN)
 
-# Pinecone setup
-INDEX_NAME = "lawdata-index"
-pinecone.init(api_key=PINECONE_API_KEY)
-index = pinecone.Index(INDEX_NAME)
-
-# Load models
+# --- LOAD MODELS ---
 @st.cache_resource(show_spinner="Loading models...")
 def load_models():
     embedding_model = SentenceTransformer("BAAI/bge-large-en")
@@ -269,10 +268,11 @@ def load_models():
 
 embedding_model, reranker = load_models()
 
-# UI Layout
-st.title("⚖️ LEGAL ASSISTANT")
-st.markdown("Ask legal questions and get AI-powered answers from legal documents.")
+# --- CONNECT TO PINECONE ---
+pc = Pinecone(api_key=PINECONE_API_KEY)
+index = pc.Index(INDEX_NAME)
 
+# --- USER INPUT ---
 query = st.text_input("Enter your legal question:")
 
 if st.button("Generate Answer"):
@@ -331,4 +331,5 @@ Answer:"""
 
         st.success("AI Response:")
         st.write(answer)
+
 
