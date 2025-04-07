@@ -5,5 +5,5 @@ together
 requests
 torch
 transformers
-rich==13.8.1
+
 
