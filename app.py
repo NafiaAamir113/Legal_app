@@ -242,83 +242,63 @@ import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
+from huggingface_hub import login
 
-# Set Streamlit layout
+# Set Streamlit page layout
 st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
 
-# Load secrets from Streamlit secrets
+# Load secrets
 HF_TOKEN = st.secrets["HF_TOKEN"]
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
 
+# Authenticate HuggingFace
+login(token=HF_TOKEN)
+
 # Pinecone setup
 INDEX_NAME = "lawdata-index"
-pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
+pinecone.init(api_key=PINECONE_API_KEY)
+index = pinecone.Index(INDEX_NAME)
 
-# Check index existence
-existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
-if INDEX_NAME not in existing_indexes:
-    st.error(f"Index '{INDEX_NAME}' not found in Pinecone.")
-    st.stop()
-
-index = pc.Index(INDEX_NAME)
-
-# Load embedding & reranking models
-@st.cache_resource(show_spinner="Loading embedding models...")
+# Load models
+@st.cache_resource(show_spinner="Loading models...")
 def load_models():
-    try:
-        embedding_model = SentenceTransformer("BAAI/bge-large-en", use_auth_token=HF_TOKEN)
-        reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-        return embedding_model, reranker
-    except Exception as e:
-        st.error(f"Error loading models: {e}")
-        return None, None
+    embedding_model = SentenceTransformer("BAAI/bge-large-en")
+    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    return embedding_model, reranker
 
 embedding_model, reranker = load_models()
-if not embedding_model or not reranker:
-    st.stop()
 
-# App UI
+# UI Layout
 st.title("⚖️ LEGAL ASSISTANT")
 st.markdown("Ask legal questions and get AI-powered answers from legal documents.")
 
-# Input field
 query = st.text_input("Enter your legal question:")
 
-# Button to generate answer
 if st.button("Generate Answer"):
-    if not query:
-        st.warning("Please enter a legal question.")
+    if not query or len(query.split()) < 4:
+        st.warning("Please enter a more detailed legal question.")
         st.stop()
 
-    if len(query.strip().split()) < 4:
-        st.warning("Your query seems incomplete. Please provide more detail.")
-        st.stop()
-
-    with st.spinner("Retrieving and analyzing documents..."):
+    with st.spinner("Retrieving and processing documents..."):
         try:
-            # Embed user query
             query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
-
-            # Query Pinecone
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
-            st.error(f"Pinecone query failed: {e}")
+            st.error(f"Error querying Pinecone: {e}")
             st.stop()
 
         matches = search_results.get("matches", [])
         if not matches:
-            st.warning("No relevant results found. Try rephrasing your query.")
+            st.warning("No relevant documents found. Try rephrasing your question.")
             st.stop()
 
-        # Extract and rerank
         context_chunks = [match["metadata"]["text"] for match in matches]
         rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
         ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
-        context_text = "\n\n".join([r[0] for r in ranked_results[:5]])
+        context_text = "\n\n".join([r[0] for r in ranked_results[:3]])
 
-        # Prompt for LLM
-        prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
+        prompt = f"""You are a legal assistant. Use the context below to answer the question clearly and concisely.
 
 Context:
 {context_text}
@@ -327,7 +307,6 @@ Question: {query}
 
 Answer:"""
 
-        # Generate answer using Together AI
         try:
             response = requests.post(
                 "https://api.together.xyz/v1/chat/completions",
@@ -338,17 +317,18 @@ Answer:"""
                 json={
                     "model": "meta-llama/Llama-3-70B-Instruct",
                     "messages": [
-                        {"role": "system", "content": "You are an expert in legal matters."},
+                        {"role": "system", "content": "You are an expert legal assistant."},
                         {"role": "user", "content": prompt}
                     ],
                     "temperature": 0.2
                 }
             )
-
-            answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
+            response_json = response.json()
+            answer = response_json.get("choices", [{}])[0].get("message", {}).get("content", "No answer generated.")
         except Exception as e:
             st.error(f"Error calling Together AI: {e}")
             st.stop()
 
         st.success("AI Response:")
         st.write(answer)
+
