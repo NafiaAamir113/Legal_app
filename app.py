@@ -234,80 +234,77 @@
 import streamlit as st
 import requests
 import pinecone
-from transformers import AutoTokenizer, AutoModel
-import torch
-import numpy as np
+from sentence_transformers import SentenceTransformer, CrossEncoder
 
-# Page config
-st.set_page_config(page_title="⚖️ Legal Assistant", layout="wide")
+# Set Streamlit layout
+st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
 
-# Load API keys
+# Load secrets from .streamlit/secrets.toml
+HF_TOKEN = st.secrets["HF_TOKEN"]
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 TOGETHER_AI_API_KEY = st.secrets["TOGETHER_AI_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
 
 # Pinecone setup
 INDEX_NAME = "lawdata-index"
 pc = pinecone.Pinecone(api_key=PINECONE_API_KEY)
-if INDEX_NAME not in [i["name"] for i in pc.list_indexes()]:
+
+# Check index existence
+existing_indexes = [index_info["name"] for index_info in pc.list_indexes()]
+if INDEX_NAME not in existing_indexes:
     st.error(f"Index '{INDEX_NAME}' not found.")
     st.stop()
 index = pc.Index(INDEX_NAME)
 
-# Title
+# Load embedding model (cached)
+@st.cache_resource(show_spinner="Loading embedding model...")
+def load_models():
+    try:
+        embedding_model = SentenceTransformer("BAAI/bge-large-en", use_auth_token=HF_TOKEN)
+        reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+        return embedding_model, reranker
+    except Exception as e:
+        st.error(f"Error loading models: {e}")
+        return None, None
+
+embedding_model, reranker = load_models()
+if embedding_model is None or reranker is None:
+    st.stop()
+
+# Page Title
 st.title("⚖️ LEGAL ASSISTANT")
 st.markdown("Ask legal questions and get AI-powered answers from legal documents.")
-
-# Load tokenizer and model securely using Hugging Face token
-@st.cache_resource(show_spinner="Loading embedding model...")
-def load_model():
-    try:
-        model_name = "BAAI/bge-large-en"
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_auth_token=HF_TOKEN)
-        model = AutoModel.from_pretrained(model_name, use_auth_token=HF_TOKEN)
-        return tokenizer, model
-    except Exception as e:
-        st.error(f"Model loading failed: {e}")
-        st.stop()
-
-tokenizer, model = load_model()
-
-# Embedding function using Transformers directly
-def get_embedding(texts):
-    inputs = tokenizer(texts, padding=True, truncation=True, return_tensors="pt")
-    with torch.no_grad():
-        model_output = model(**inputs)
-    embeddings = model_output.last_hidden_state[:, 0, :]
-    normalized = torch.nn.functional.normalize(embeddings, p=2, dim=1)
-    return normalized[0].cpu().numpy().tolist()
 
 # Input field
 query = st.text_input("Enter your legal question:")
 
-# Answer logic
+# Generate Answer
 if st.button("Generate Answer"):
-    if not query or len(query.split()) < 4:
-        st.warning("Please enter a more detailed legal question.")
+    if not query:
+        st.warning("Please enter a legal question.")
         st.stop()
 
-    with st.spinner("Searching legal documents..."):
+    if len(query.split()) < 4:
+        st.warning("Your query seems incomplete. Please provide more detail.")
+        st.stop()
+
+    with st.spinner("Searching..."):
         try:
-            query_embedding = get_embedding(query)
+            query_embedding = embedding_model.encode(query, normalize_embeddings=True).tolist()
             search_results = index.query(vector=query_embedding, top_k=5, include_metadata=True)
         except Exception as e:
             st.error(f"Pinecone query failed: {e}")
             st.stop()
 
-        matches = search_results.get("matches", [])
-        if not matches:
-            st.warning("No results found. Try rephrasing your question.")
+        if not search_results.get("matches"):
+            st.warning("No relevant results found. Try rephrasing your query.")
             st.stop()
 
-        context_chunks = [match["metadata"]["text"] for match in matches]
-        context_text = "\n\n".join(context_chunks)
+        context_chunks = [match["metadata"]["text"] for match in search_results["matches"]]
+        rerank_scores = reranker.predict([(query, chunk) for chunk in context_chunks])
+        ranked_results = sorted(zip(context_chunks, rerank_scores), key=lambda x: x[1], reverse=True)
+        context_text = "\n\n".join([r[0] for r in ranked_results[:5]])
 
-        # LLM prompt
-        prompt = f"""You are a legal assistant. Use the following legal context to answer the question.
+        prompt = f"""You are a legal assistant. Given the retrieved legal documents, provide a detailed answer.
 
 Context:
 {context_text}
@@ -316,25 +313,24 @@ Question: {query}
 
 Answer:"""
 
-        # Generate with Together AI
-        response = requests.post(
-            "https://api.together.xyz/v1/chat/completions",
-            headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": "meta-llama/Llama-3-70B-Instruct",
-                "messages": [
-                    {"role": "system", "content": "You are an expert in legal matters."},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.3
-            }
-        )
+        try:
+            response = requests.post(
+                "https://api.together.xyz/v1/chat/completions",
+                headers={"Authorization": f"Bearer {TOGETHER_AI_API_KEY}", "Content-Type": "application/json"},
+                json={
+                    "model": "meta-llama/Llama-3-70B-Instruct",
+                    "messages": [
+                        {"role": "system", "content": "You are an expert in legal matters."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "temperature": 0.2
+                }
+            )
+            answer = response.json().get("choices", [{}])[0].get("message", {}).get("content", "No valid response from AI.")
+        except Exception as e:
+            st.error(f"Error calling Together AI: {e}")
+            st.stop()
 
-        # Parse and show response
-        result = response.json()
-        answer = result.get("choices", [{}])[0].get("message", {}).get("content", "No valid response.")
         st.success("AI Response:")
         st.write(answer)
 
-# Footer
-st.markdown("<p style='text-align: center;'>🚀 Built with Streamlit</p>", unsafe_allow_html=True)
