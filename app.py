@@ -235,6 +235,8 @@ import streamlit as st
 import requests
 import pinecone
 from sentence_transformers import SentenceTransformer, CrossEncoder
+from transformers.utils import init_empty_weights  # Ensure it exists in your version
+
 
 # Set Streamlit layout
 st.set_page_config(page_title="LEGAL ASSISTANT", layout="wide")
