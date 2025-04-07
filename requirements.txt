@@ -1,13 +1,6 @@
-#streamlit
-#pinecone
-#sentence-transformers
-#together
-#requests
-#torch
-
 streamlit
-sentence-transformers
-transformers==4.38.1
-accelerate==0.26.1
 pinecone
+sentence-transformers
+together
 requests
+torch
