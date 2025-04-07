@@ -352,15 +352,3 @@ Answer:"""
 
         st.success("AI Response:")
         st.write(answer)
-
-
-
-
-
-
-
-
-
-
-
-
